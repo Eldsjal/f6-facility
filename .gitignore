@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vite/
+
+# test artifacts
+.playwright-mcp/
+f6-*.jpeg
