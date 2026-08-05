@@ -32,11 +32,19 @@ jobs:
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
-      - name: Merge patch, minor, and security updates
-        if: |
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
-          steps.metadata.outputs.alert-state == 'OPEN'
+      # fetch-metadata cannot resolve a single update-type for a PR that bumps
+      # more than one dependency ("bump X and Y", grouped updates) — it emits
+      # `null` and leaves alert-state empty. Those are a large share of this
+      # backlog, so enumerating patch/minor/security silently skips them and
+      # they pile up exactly as before. Merge condition is therefore "not a
+      # *detectable* major" rather than a whitelist.
+      #
+      # The trade: an undetectable major inside a multi-dependency PR merges
+      # without review. Acceptable only because this variant is restricted to
+      # repos with no CI and no protected branch — i.e. nothing was checking
+      # anyway. Do not copy this condition into a repo that has real tests.
+      - name: Merge unless this is a detectable major bump
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         run: gh pr merge --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
