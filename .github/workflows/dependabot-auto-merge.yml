@@ -1,0 +1,50 @@
+# .github/workflows/dependabot-auto-merge.yml  (UNGATED VARIANT)
+#
+# For repos with NO branch protection.
+#
+# Why this variant exists: `gh pr merge --auto` does not fall back to a plain
+# merge when a branch is unprotected — it hard-fails with
+#   "Protected branch rules not configured for this branch (enablePullRequestAutoMerge)"
+# GitHub refuses to queue an auto-merge when there is nothing to wait for. So on
+# an unprotected branch the only way to merge from a workflow is to merge now.
+#
+# That is exactly what this does, and there is no test gate behind it. Only use
+# it in repos that have no CI at all, where a merge to the default branch is
+# already unverified. If the repo ever gains CI, protect the branch, require the
+# check, and switch to the --auto variant instead.
+
+name: Dependabot auto-merge
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        # v2.4.0, pinned by SHA (the SHA GitHub's own docs publish)
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Merge patch, minor, and security updates
+        if: |
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          steps.metadata.outputs.alert-state == 'OPEN'
+        run: gh pr merge --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Flag major bumps for review
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: gh pr edit "$PR_URL" --add-label "needs-human"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
